@@ -38,7 +38,7 @@ function uniqueRandomIds(count: number, max: number): number[] {
   while (ids.size < count) {
     ids.add(Math.floor(Math.random() * max) + 1)
   }
-  return [...ids]
+  return Array.from(ids)
 }
 
 function shuffle<T>(arr: T[]): T[] {
