@@ -2,18 +2,19 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import SilhouetteImage from '@/components/SilhouetteImage'
-import GuessInput from '@/components/GuessInput'
+import ChoiceButtons from '@/components/ChoiceButtons'
 import Timer from '@/components/Timer'
 import ScoreBoard from '@/components/ScoreBoard'
-import { getRandomPokemon, checkAnswer, type Pokemon } from '@/lib/pokeapi'
+import { getQuizData, type Pokemon, type QuizData } from '@/lib/pokeapi'
 
 type Phase = 'loading' | 'playing' | 'revealed'
-type Result = 'correct' | 'timeup' | 'giveup' | null
+type Result = 'correct' | 'wrong' | 'timeup' | null
 
 export default function Home() {
-  const [pokemon, setPokemon] = useState<Pokemon | null>(null)
+  const [quizData, setQuizData] = useState<QuizData | null>(null)
   const [phase, setPhase] = useState<Phase>('loading')
   const [result, setResult] = useState<Result>(null)
+  const [selected, setSelected] = useState<Pokemon | null>(null)
   const [correct, setCorrect] = useState(0)
   const [total, setTotal] = useState(0)
   const [streak, setStreak] = useState(0)
@@ -22,8 +23,9 @@ export default function Home() {
   const loadNext = useCallback(async () => {
     setPhase('loading')
     setResult(null)
-    const p = await getRandomPokemon()
-    setPokemon(p)
+    setSelected(null)
+    const data = await getQuizData()
+    setQuizData(data)
     setTimerKey(k => k + 1)
     setPhase('playing')
   }, [])
@@ -32,32 +34,28 @@ export default function Home() {
     loadNext()
   }, [loadNext])
 
-  const handleGuess = useCallback(
-    (guess: string) => {
-      if (!pokemon || phase !== 'playing') return
-      if (checkAnswer(guess, pokemon)) {
-        setPhase('revealed')
+  const handleChoice = useCallback(
+    (choice: Pokemon) => {
+      if (!quizData || phase !== 'playing') return
+      setSelected(choice)
+      setPhase('revealed')
+      setTotal(t => t + 1)
+      if (choice.id === quizData.answer.id) {
         setResult('correct')
         setCorrect(c => c + 1)
-        setTotal(t => t + 1)
         setStreak(s => s + 1)
+      } else {
+        setResult('wrong')
+        setStreak(0)
       }
     },
-    [pokemon, phase]
+    [quizData, phase]
   )
 
   const handleTimeUp = useCallback(() => {
     if (phase !== 'playing') return
     setPhase('revealed')
     setResult('timeup')
-    setTotal(t => t + 1)
-    setStreak(0)
-  }, [phase])
-
-  const handleGiveUp = useCallback(() => {
-    if (phase !== 'playing') return
-    setPhase('revealed')
-    setResult('giveup')
     setTotal(t => t + 1)
     setStreak(0)
   }, [phase])
@@ -77,61 +75,42 @@ export default function Home() {
             <div className="w-64 h-64 flex items-center justify-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-400" />
             </div>
-          ) : pokemon ? (
+          ) : quizData ? (
             <>
               <SilhouetteImage
-                spriteUrl={pokemon.spriteUrl}
+                spriteUrl={quizData.answer.spriteUrl}
                 revealed={phase === 'revealed'}
-                pokemonName={pokemon.nameJa}
+                pokemonName={quizData.answer.nameJa}
               />
 
               {phase === 'revealed' && (
-                <div className="text-center">
-                  <span
-                    className={`text-lg font-bold ${
-                      result === 'correct'
-                        ? 'text-green-400'
-                        : result === 'timeup'
-                        ? 'text-red-400'
-                        : 'text-gray-400'
-                    }`}
-                  >
-                    {result === 'correct' && '✓ 正解！'}
-                    {result === 'timeup' && '✗ 時間切れ…'}
-                    {result === 'giveup' && 'こたえ：'}
-                  </span>
-                  <span className="text-white text-lg font-bold ml-2">{pokemon.nameJa}</span>
-                  <span className="text-gray-400 text-sm ml-1">({pokemon.nameEn})</span>
-                </div>
+                <p className={`text-lg font-bold ${
+                  result === 'correct' ? 'text-green-400' :
+                  result === 'wrong'   ? 'text-red-400'   : 'text-gray-400'
+                }`}>
+                  {result === 'correct' && '✓ 正解！'}
+                  {result === 'wrong'   && '✗ 不正解…'}
+                  {result === 'timeup'  && '⏰ 時間切れ！'}
+                </p>
               )}
 
               {phase === 'playing' && (
-                <Timer
-                  key={timerKey}
-                  duration={30}
-                  running
-                  onTimeUp={handleTimeUp}
-                />
+                <Timer key={timerKey} duration={30} running onTimeUp={handleTimeUp} />
               )}
+
+              <ChoiceButtons
+                choices={quizData.choices}
+                answer={quizData.answer}
+                selected={selected}
+                onSelect={handleChoice}
+              />
             </>
           ) : null}
-
-          {phase === 'playing' && (
-            <>
-              <GuessInput onSubmit={handleGuess} disabled={false} />
-              <button
-                onClick={handleGiveUp}
-                className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                わからない（答えを見る）
-              </button>
-            </>
-          )}
 
           {phase === 'revealed' && (
             <button
               onClick={loadNext}
-              className="px-6 py-3 bg-yellow-500 hover:bg-yellow-400 rounded-xl font-bold text-gray-900 transition-colors"
+              className="w-full px-6 py-3 bg-yellow-500 hover:bg-yellow-400 rounded-xl font-bold text-gray-900 transition-colors"
             >
               次のポケモン →
             </button>
